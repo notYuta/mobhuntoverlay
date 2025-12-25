@@ -5,12 +5,12 @@
     "Punchline": "B-rank mob location overlay for hunt bills",
     "Description": "手配書の「生息場所」ボタンからマップを開くと、Bモブのスポーン位置をマーカー表示します。",
     "InternalName": "MobHuntOverlay",
-    "AssemblyVersion": "1.0.0.1",
+    "AssemblyVersion": "1.0.0.2",
     "RepoUrl": "https://github.com/notYuta/mobhuntoverlay",
     "ApplicableVersion": "any",
-    "DalamudApiLevel": 11,
-    "DownloadLinkInstall": "https://github.com/notYuta/mobhuntoverlay/releases/download/v1.0.1/MobHuntOverlay.zip",
-    "DownloadLinkUpdate": "https://github.com/notYuta/mobhuntoverlay/releases/download/v1.0.1/MobHuntOverlay.zip",
+    "DalamudApiLevel": 14,
+    "DownloadLinkInstall": "https://github.com/notYuta/mobhuntoverlay/releases/download/v1.0.2/MobHuntOverlay.zip",
+    "DownloadLinkUpdate": "https://github.com/notYuta/mobhuntoverlay/releases/download/v1.0.2/MobHuntOverlay.zip",
     "IsHide": false,
     "IconUrl": ""
   }
