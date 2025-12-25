@@ -2,6 +2,7 @@ using System;
 using System.Numerics;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.UI.Agent;
+using Lumina.Excel.Sheets;
 using MobHuntOverlay.Models;
 
 namespace MobHuntOverlay.Services;
@@ -9,99 +10,152 @@ namespace MobHuntOverlay.Services;
 public unsafe class MapMarkerManager : IDisposable
 {
     private readonly IClientState clientState;
+    private readonly IDataManager dataManager;
     private readonly IPluginLog log;
 
-    private MobLocationData? mobLocationData;
-    private TerritoryData? currentTerritoryData;
-    private ushort lastTerritoryId;
+    public MobLocationData? MobLocationData { get; private set; }
 
-    // マーカーアイコンID (60561 = 赤い丸マーカー)
-    private const uint MarkerIconId = 60561;
+    // マーカーアイコンID
+    private const uint MarkerIconId = 61710;
 
-    public MapMarkerManager(IClientState clientState, IPluginLog log)
+    public MapMarkerManager(IClientState clientState, IDataManager dataManager, IPluginLog log)
     {
         this.clientState = clientState;
+        this.dataManager = dataManager;
         this.log = log;
-
-        this.clientState.TerritoryChanged += OnTerritoryChanged;
     }
 
     public void LoadMobLocationData(MobLocationData data)
     {
-        mobLocationData = data;
+        MobLocationData = data;
         log.Information($"Loaded mob location data version {data.Version}");
-
-        // 初回ロード時に現在のテリトリーをチェック
-        UpdateCurrentTerritory(clientState.TerritoryType);
     }
 
-    private void OnTerritoryChanged(ushort territoryId)
+    private unsafe void AddMarkersForCurrentTerritory()
     {
-        UpdateCurrentTerritory(territoryId);
-    }
-
-    private void UpdateCurrentTerritory(ushort territoryId)
-    {
-        if (mobLocationData == null) return;
-        if (lastTerritoryId == territoryId) return;
-
-        lastTerritoryId = territoryId;
-        currentTerritoryData = mobLocationData.Data.Find(t => t.TerritoryTypeId == territoryId);
-
-        if (currentTerritoryData != null)
-        {
-            log.Information($"Territory changed to {currentTerritoryData.InternalName}, adding markers...");
-            AddMarkersForCurrentTerritory();
-        }
-        else
-        {
-            log.Debug($"No mob data for territory {territoryId}");
-        }
-    }
-
-    private void AddMarkersForCurrentTerritory()
-    {
-        if (currentTerritoryData == null) return;
-
         var agentMap = AgentMap.Instance();
         if (agentMap == null) return;
 
-        foreach (var mob in currentTerritoryData.Mobs)
+        // マーカーリセット
+        agentMap->ResetMapMarkers();
+
+        if (MobLocationData == null) return;
+
+        // 1. 表示すべきテリトリーデータの決定
+        var territoryId = (ushort)agentMap->SelectedTerritoryId;
+        if (territoryId == 0)
         {
+            territoryId = clientState.TerritoryType;
+        }
+
+        var territoryData = MobLocationData.Data.Find(t => t.TerritoryTypeId == territoryId);
+        if (territoryData == null) return;
+
+        // 2. マップタイトルからターゲット名抽出
+        var mapTitle = agentMap->MapTitleString.ToString();
+        string? targetMobName = null;
+
+        if (!string.IsNullOrEmpty(mapTitle))
+        {
+            // パターン: "リスキーモブ手配書（モブ名）" ... 全角カッコ
+            var start = mapTitle.LastIndexOf('（');
+            var end = mapTitle.LastIndexOf('）');
+            
+            if (start != -1 && end != -1 && end > start)
+            {
+                targetMobName = mapTitle.Substring(start + 1, end - start - 1).Trim();
+            }
+            else
+            {
+                // 英語/半角カッコ対応
+                start = mapTitle.LastIndexOf('(');
+                end = mapTitle.LastIndexOf(')');
+                
+                if (start != -1 && end != -1 && end > start)
+                {
+                    targetMobName = mapTitle.Substring(start + 1, end - start - 1).Trim();
+                }
+            }
+        }
+
+        // ターゲット名がない場合は表示しない（通常のマップ表示を妨げない）
+        if (string.IsNullOrEmpty(targetMobName)) return;
+
+        // 3. マーカー描画設定
+        ushort sizeFactor = 100;
+        short offsetX = 0;
+        short offsetY = 0;
+
+        var mapId = agentMap->SelectedMapId > 0 ? agentMap->SelectedMapId : clientState.MapId;
+
+        if (dataManager.GetExcelSheet<Map>().TryGetRow(mapId, out var mapRow))
+        {
+            sizeFactor = mapRow.SizeFactor;
+            offsetX = mapRow.OffsetX;
+            offsetY = mapRow.OffsetY;
+        }
+
+        var bnpcSheet = dataManager.GetExcelSheet<BNpcName>();
+
+        foreach (var mob in territoryData.Mobs)
+        {
+            bool isMatch = false;
+
+            // 1. ローカライズ名で一致チェック
+            if (bnpcSheet != null && bnpcSheet.TryGetRow(mob.BNpcNameId, out var bnpcRow))
+            {
+                var localName = bnpcRow.Singular.ToString();
+                
+                if (!string.IsNullOrEmpty(localName) && string.Equals(targetMobName, localName, StringComparison.OrdinalIgnoreCase))
+                {
+                    isMatch = true;
+                }
+                else if (!string.IsNullOrEmpty(localName) && localName.Contains(targetMobName, StringComparison.OrdinalIgnoreCase))
+                {
+                    isMatch = true;
+                }
+            }
+
+            // 2. 英語名でもチェック
+            if (!isMatch && !string.IsNullOrEmpty(mob.MobName))
+            {
+                if (string.Equals(targetMobName, mob.MobName, StringComparison.OrdinalIgnoreCase))
+                {
+                    isMatch = true;
+                }
+            }
+            
+            if (!isMatch) continue;
+            
             foreach (var location in mob.Locations)
             {
-                // ワールド座標を直接使用
-                var worldPos = new Vector3(location.X, location.Y, location.Z);
-
-                // マーカーを追加（マップとミニマップ両方）
-                if (!agentMap->AddMapMarker(worldPos, MarkerIconId, scale: 0))
-                {
-                    log.Warning($"Failed to add map marker for {mob.MobName} at ({location.X}, {location.Y}, {location.Z})");
-                }
-                else
-                {
-                    log.Debug($"Added marker for {mob.MobName} at ({location.X}, {location.Y}, {location.Z})");
-                }
-
-                // ミニマップにもマーカーを追加
-                if (!agentMap->AddMiniMapMarker(worldPos, MarkerIconId, scale: 0))
-                {
-                    log.Warning($"Failed to add minimap marker for {mob.MobName}");
-                }
+                var worldPos = MapCoordToWorld(location.X, location.Y, sizeFactor, offsetX, offsetY);
+                agentMap->AddMapMarker(worldPos, MarkerIconId, scale: 0);
             }
         }
     }
 
     /// <summary>
-    /// 手動でマーカーを再追加（マップを開いた時などに呼び出し可能）
+    /// マップ座標からワールド座標に変換
     /// </summary>
-    public void RefreshMarkers()
+    private Vector3 MapCoordToWorld(float mapX, float mapY, ushort sizeFactor, short offsetX, short offsetY)
+    {
+        var scale = sizeFactor / 100.0f;
+        var worldX = (mapX - 21.0f) * 50.0f / scale - offsetX;
+        var worldZ = (mapY - 21.0f) * 50.0f / scale - offsetY;
+        
+        return new Vector3(worldX, 0, worldZ);
+    }
+
+    /// <summary>
+    /// マーカーを再追加
+    /// </summary>
+    public unsafe void RefreshMarkers()
     {
         AddMarkersForCurrentTerritory();
     }
 
     public void Dispose()
     {
-        clientState.TerritoryChanged -= OnTerritoryChanged;
     }
 }

@@ -1,4 +1,23 @@
-.vs/
-obj/
+# Build outputs
 bin/
+obj/
+
+# IDE
+.vs/
+.vscode/
 *.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Packages
+packages/
+*.nupkg
+
+# Lock file (regenerated on restore)
+packages.lock.json
+
+# Release artifacts
+*.zip

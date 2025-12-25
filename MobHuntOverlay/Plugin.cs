@@ -1,49 +1,46 @@
-using Dalamud.Game.Command;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using System;
 using System.IO;
 using System.Text.Json;
-using Dalamud.Interface.Windowing;
+using Dalamud.Game.Addon.Lifecycle;
+using Dalamud.Game.Addon.Lifecycle.AddonArgTypes;
 using Dalamud.Plugin.Services;
 using MobHuntOverlay.Services;
 using MobHuntOverlay.Models;
-using MobHuntOverlay.Windows;
 
 namespace MobHuntOverlay;
 
 public sealed class Plugin : IDalamudPlugin
 {
     [PluginService] internal static IDalamudPluginInterface PluginInterface { get; private set; } = null!;
-    [PluginService] internal static ICommandManager CommandManager { get; private set; } = null!;
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
-    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
     [PluginService] internal static IDataManager DataManager { get; private set; } = null!;
     [PluginService] internal static IPluginLog Log { get; private set; } = null!;
+    [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
 
-    private const string CommandName = "/mobhunt";
-
-    public readonly WindowSystem WindowSystem = new("MobHuntOverlay");
-    private DebugWindow DebugWindow { get; init; }
     private MapMarkerManager MapMarkerManager { get; init; }
 
     public Plugin()
     {
-        MapMarkerManager = new MapMarkerManager(ClientState, Log);
+        MapMarkerManager = new MapMarkerManager(ClientState, DataManager, Log);
         LoadMobLocationData();
 
-        DebugWindow = new DebugWindow(ClientState, ObjectTable, DataManager, Log);
-        WindowSystem.AddWindow(DebugWindow);
+        // マップが開かれるたびにマーカーを再追加
+        AddonLifecycle.RegisterListener(AddonEvent.PostSetup, "AreaMap", OnMapRefresh);
+        AddonLifecycle.RegisterListener(AddonEvent.PostRefresh, "AreaMap", OnMapRefresh);
+        AddonLifecycle.RegisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapRefresh);
 
-        CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
-        {
-            HelpMessage = "Open MobHuntOverlay debug window"
-        });
-
-        PluginInterface.UiBuilder.Draw += WindowSystem.Draw;
-        PluginInterface.UiBuilder.OpenMainUi += ToggleDebugWindow;
+        // Dalamud警告を抑制（このプラグインはUIウィンドウを持たない）
+        PluginInterface.UiBuilder.OpenConfigUi += () => { };
+        PluginInterface.UiBuilder.OpenMainUi += () => { };
 
         Log.Information("MobHuntOverlay loaded successfully");
+    }
+
+    private void OnMapRefresh(AddonEvent type, AddonArgs args)
+    {
+        MapMarkerManager.RefreshMarkers();
     }
 
     private void LoadMobLocationData()
@@ -72,23 +69,10 @@ public sealed class Plugin : IDalamudPlugin
 
     public void Dispose()
     {
-        PluginInterface.UiBuilder.Draw -= WindowSystem.Draw;
-        PluginInterface.UiBuilder.OpenMainUi -= ToggleDebugWindow;
+        AddonLifecycle.UnregisterListener(AddonEvent.PostSetup, "AreaMap", OnMapRefresh);
+        AddonLifecycle.UnregisterListener(AddonEvent.PostRefresh, "AreaMap", OnMapRefresh);
+        AddonLifecycle.UnregisterListener(AddonEvent.PostUpdate, "AreaMap", OnMapRefresh);
 
-        WindowSystem.RemoveAllWindows();
-        DebugWindow.Dispose();
         MapMarkerManager.Dispose();
-
-        CommandManager.RemoveHandler(CommandName);
-    }
-
-    private void OnCommand(string command, string args)
-    {
-        ToggleDebugWindow();
-    }
-
-    private void ToggleDebugWindow()
-    {
-        DebugWindow.Toggle();
     }
 }
