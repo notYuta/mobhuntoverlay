@@ -7,22 +7,21 @@ using MobHuntOverlay.Models;
 
 namespace MobHuntOverlay.Services;
 
-public unsafe class MapMarkerManager : IDisposable
+public unsafe class MapMarkerService : IDisposable
 {
     private readonly IClientState clientState;
     private readonly IDataManager dataManager;
     private readonly IPluginLog log;
+    private readonly Configuration configuration;
 
     public MobLocationData? MobLocationData { get; private set; }
 
-    // マーカーアイコンID
-    private const uint MarkerIconId = 61710;
-
-    public MapMarkerManager(IClientState clientState, IDataManager dataManager, IPluginLog log)
+    public MapMarkerService(IClientState clientState, IDataManager dataManager, IPluginLog log, Configuration configuration)
     {
         this.clientState = clientState;
         this.dataManager = dataManager;
         this.log = log;
+        this.configuration = configuration;
     }
 
     public void LoadMobLocationData(MobLocationData data)
@@ -130,7 +129,7 @@ public unsafe class MapMarkerManager : IDisposable
             foreach (var location in mob.Locations)
             {
                 var worldPos = MapCoordToWorld(location.X, location.Y, sizeFactor, offsetX, offsetY);
-                agentMap->AddMapMarker(worldPos, MarkerIconId, scale: 0);
+                agentMap->AddMapMarker(worldPos, configuration.MarkerIconId, scale: 0);
             }
         }
     }

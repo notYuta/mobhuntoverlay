@@ -9,8 +9,8 @@
     "RepoUrl": "https://github.com/notYuta/mobhuntoverlay",
     "ApplicableVersion": "any",
     "DalamudApiLevel": 14,
-    "DownloadLinkInstall": "https://github.com/notYuta/mobhuntoverlay/releases/download/v1.0.2/MobHuntOverlay.zip",
-    "DownloadLinkUpdate": "https://github.com/notYuta/mobhuntoverlay/releases/download/v1.0.2/MobHuntOverlay.zip",
+    "DownloadLinkInstall": "https://github.com/notYuta/mobhuntoverlay/releases/latest/download/MobHuntOverlay.zip",
+    "DownloadLinkUpdate": "https://github.com/notYuta/mobhuntoverlay/releases/latest/download/MobHuntOverlay.zip",
     "IsHide": false,
     "IconUrl": ""
   }
